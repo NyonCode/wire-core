@@ -17,6 +17,7 @@ use NyonCode\WireCore\Core\Plugin\Contracts\Plugin;
 use NyonCode\WireCore\Core\Plugin\PluginManager;
 use NyonCode\WireCore\Core\Validation\ValidationPipeline;
 use NyonCode\WireCore\Foundation\Icons\IconManager;
+use NyonCode\WireCore\Foundation\Icons\IconSet;
 use NyonCode\WireCore\Modals\View\ConfirmationComponent;
 use NyonCode\WireCore\Modals\View\ModalComponent;
 use NyonCode\WireCore\Modals\View\SlideOverComponent;
@@ -37,39 +38,76 @@ class WireCoreServiceProvider extends PackageServiceProvider
         $packager
             ->name('WireCore')
             ->hasShortName('wire-core')
+            ->registeredPackage(function ($packager) {
+                $this->registerFoundation();
+                $this->registerCore();
+                $this->registerNotifications();
+                $this->registerPlugins();
+            })
+            ->bootedPackage(function ($packager) {
+                $this->bootFoundation();
+                $this->bootActions();
+                $this->bootNotifications();
+                $this->bootModals();
+                $this->bootPlugins();
+            })
             ->hasConfig()
             ->hasViews()
+            ->hasMigrations()
             ->hasTranslations('resources/lang')
             ->hasAbout();
-    }
-
-    public function register(): void
-    {
-        parent::register();
-
-        $this->registerFoundation();
-        $this->registerCore();
-        $this->registerNotifications();
-        $this->registerPlugins();
-    }
-
-    public function boot(): void
-    {
-        parent::boot();
-
-        $this->bootFoundation();
-        $this->bootActions();
-        $this->bootNotifications();
-        $this->bootModals();
-        $this->bootPlugins();
     }
 
     // ─── Foundation ─────────────────────────────────────────────
 
     protected function registerFoundation(): void
     {
-        $this->app->singleton(IconManager::class, function () {
-            return new IconManager;
+        $this->app->singleton(IconManager::class, function ($app) {
+            $manager = new IconManager;
+
+            // Register icon sets declared in config. The set whose key matches
+            // `icons.default_set` becomes the unprefixed base (Heroicons by
+            // default); every other set's key is its required prefix, so its icons
+            // are addressed as `prefix:name` (e.g. `lucide:home`).
+            $defaultKey = config('wire-core.icons.default_set', 'default');
+            /** @var array<int|string, mixed> $sets */
+            $sets = config('wire-core.icons.sets', []);
+
+            foreach ($sets as $prefix => $class) {
+                if (! is_string($class) || ! is_a($class, IconSet::class, true)) {
+                    continue;
+                }
+
+                if ($prefix === $defaultKey) {
+                    $manager->setDefaultIconSet($app->make($class));
+
+                    continue;
+                }
+
+                if (! is_string($prefix) || $prefix === '') {
+                    throw new \InvalidArgumentException(
+                        "Icon set [{$class}] must be configured under a string prefix key in "
+                        .'wire-core.icons.sets (e.g. \'lucide\' => LucideIconSet::class).'
+                    );
+                }
+
+                $manager->registerIconSet($app->make($class), $prefix);
+            }
+
+            // Load SVG files from any configured directories. This is the
+            // easiest way to add custom icons — no class required. A string key
+            // is used as a name prefix (e.g. 'brand' => '/path' → 'brand-logo'),
+            // which also avoids collisions when two folders share a file name.
+            /** @var array<int|string, mixed> $paths */
+            $paths = config('wire-core.icons.paths', []);
+
+            foreach ($paths as $prefix => $path) {
+                if (is_string($path) && is_dir($path)) {
+                    $manager->registerIconsFromDirectory($path, is_string($prefix) ? $prefix : '');
+                }
+            }
+
+            return $manager;
         });
     }
 
@@ -139,6 +177,9 @@ class WireCoreServiceProvider extends PackageServiceProvider
         Blade::component('wire-modals::modal', ModalComponent::class);
         Blade::component('wire-modals::confirmation', ConfirmationComponent::class);
         Blade::component('wire-modals::slide-over', SlideOverComponent::class);
+
+        // Universal alias: <x-wire::modal />
+        Blade::component('wire::modal', ModalComponent::class);
     }
 
     // ─── Plugins ────────────────────────────────────────────────
@@ -149,10 +190,14 @@ class WireCoreServiceProvider extends PackageServiceProvider
 
         // Register plugins from config
         $this->app->afterResolving(PluginManager::class, function (PluginManager $manager) {
-            /** @var array<int, class-string<Plugin>> $plugins */
+            /** @var list<mixed> $plugins */
             $plugins = $this->app['config']->get('wire-core.plugins', []);
 
             foreach ($plugins as $pluginClass) {
+                if (! is_string($pluginClass) || ! is_subclass_of($pluginClass, Plugin::class)) {
+                    continue;
+                }
+
                 $manager->register($this->app->make($pluginClass));
             }
         });

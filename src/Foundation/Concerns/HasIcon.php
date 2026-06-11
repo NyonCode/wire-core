@@ -5,9 +5,17 @@ declare(strict_types=1);
 namespace NyonCode\WireCore\Foundation\Concerns;
 
 use Closure;
+use NyonCode\WireCore\Foundation\Icons\Icon;
+use NyonCode\WireCore\Foundation\Support\EvaluatesClosures;
 
 /**
  * Provides an icon property for components.
+ *
+ * The using class must provide an `evaluate()` method (e.g. via the
+ * {@see EvaluatesClosures} trait) so
+ * closure-based icons can be resolved. Both Foundation\Components\Component
+ * and the table DataComponent satisfy this, so fields and columns can share
+ * the same icon API.
  */
 trait HasIcon
 {
@@ -15,9 +23,9 @@ trait HasIcon
 
     protected ?string $iconPosition = 'before';
 
-    public function icon(string|Closure|null $icon, ?string $position = null): static
+    public function icon(string|Icon|Closure|null $icon, ?string $position = null): static
     {
-        $this->icon = $icon;
+        $this->icon = $icon instanceof Icon ? $icon->value() : $icon;
 
         if ($position !== null) {
             $this->iconPosition = $position;
@@ -28,7 +36,9 @@ trait HasIcon
 
     public function getIcon(): ?string
     {
-        return $this->evaluate($this->icon);
+        $value = $this->evaluate($this->icon);
+
+        return $value instanceof Icon ? $value->value() : $value;
     }
 
     public function getIconPosition(): string
