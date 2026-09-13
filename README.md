@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/ONyklicek/WireStack/HEAD/docs-site/assets/brand/github/readme-banner-dark.png">
+  <img src="https://raw.githubusercontent.com/ONyklicek/WireStack/HEAD/docs-site/assets/brand/github/readme-banner-light.png" alt="WireStack" width="1200">
+</picture>
+
 # Wire Core
 
 Shared foundation for the [Wire ecosystem](https://github.com/NyonCode/wire) - traits, actions, modals, notifications, widgets, audit logging, icons, and colors.
@@ -5,8 +10,8 @@ Shared foundation for the [Wire ecosystem](https://github.com/NyonCode/wire) - t
 ## Requirements
 
 - PHP 8.2+
-- Laravel 10, 11, or 12
-- Livewire 3.x
+- Laravel 12.61+ or 13.12+
+- Livewire 4.x
 
 ## Installation
 
@@ -39,10 +44,10 @@ export default {
 
 ### Alpine.js
 
-Wire Core uses Alpine.js (included via Livewire 3). No separate Alpine installation needed.
+Wire Core uses Alpine.js (included via Livewire 4). No separate Alpine installation needed.
 
 Its interactive controllers — `wireDropdown`, `wireContextMenu`, `wireTabs`, `wireWizard`,
-`wireEditableCell`, `wireFillHandle` — ship as a pre-built bundle served from the package's
+`wireEditableCell` — ship as a pre-built bundle served from the package's
 own route: nothing to publish, no npm, no build step. Add one directive to your layout
 `<head>` so every installed Wire package's controllers are in the initial document:
 
@@ -60,7 +65,7 @@ for newly injected `<head>` scripts, so only a bundle that was already in the do
 safe from that race. `@wireStackScripts('wire-core')` narrows the output to one package.
 
 Packages declare their bundles with the canonical `Foundation\Assets\AssetManager`; see
-[JavaScript Assets](../../docs/getting-started.md#javascript-assets).
+[JavaScript Assets](../../docs/start/getting-started.md#javascript-assets).
 
 ## What's Included
 
@@ -143,14 +148,14 @@ php artisan migrate
 
 | Document | Description |
 |----------|-------------|
-| [Core Foundation](../../docs/core/foundation.md) | Shared traits, icons, colors, and Blade helpers |
-| [Actions](../../docs/core/actions.md) | Row, bulk, header actions, and action groups |
-| [Notifications](../../docs/core/notifications.md) | Notification value objects and drivers |
+| [Core Foundation](../../docs/core/foundation/index.md) | Shared traits, icons, colors, and Blade helpers |
+| [Actions](../../docs/core/actions/index.md) | Row, bulk, header actions, and action groups |
+| [Notifications](../../docs/core/notifications/index.md) | Notification value objects and drivers |
 | [Modals](../../docs/core/modals.md) | Confirmations, slide-overs, and wizards |
-| [Widgets](../../docs/core/widgets.md) | Dashboard widgets |
-| [Plugins](../../docs/core/plugins.md) | App and package extension points |
+| [Widgets](../../docs/core/widgets/index.md) | Dashboard widgets |
+| [Plugins](../../docs/core/plugins/index.md) | App and package extension points |
 | [Audit Log](../../docs/core/audit.md) | Audit setup and usage |
-| [Configuration](../../docs/configuration.md) | Config files and environment variables |
+| [Configuration](../../docs/start/configuration.md) | Config files and environment variables |
 
 ## License
 

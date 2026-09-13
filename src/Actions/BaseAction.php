@@ -16,8 +16,10 @@ use NyonCode\WireCore\Actions\Concerns\HasLifecycle;
 use NyonCode\WireCore\Actions\Concerns\HasLoadingState;
 use NyonCode\WireCore\Actions\Concerns\HasModal;
 use NyonCode\WireCore\Actions\Concerns\HasVisibility;
+use NyonCode\WireCore\Actions\Concerns\Queueable;
 use NyonCode\WireCore\Foundation\Colors\Color;
 use NyonCode\WireCore\Foundation\Concerns\HasSize;
+use NyonCode\WireCore\Foundation\Contracts\ActionContract;
 
 /**
  * Abstract BaseAction
@@ -31,7 +33,7 @@ use NyonCode\WireCore\Foundation\Concerns\HasSize;
  * @phpstan-consistent-constructor
  */
 #[AllowDynamicProperties]
-abstract class BaseAction implements Htmlable
+abstract class BaseAction implements ActionContract, Htmlable
 {
     use HasColor;
     use HasDynamicProperties;
@@ -42,6 +44,7 @@ abstract class BaseAction implements Htmlable
     use HasModal;
     use HasVisibility;
     use Macroable;
+    use Queueable;
 
     /**
      * Canonical base class string for every rendered action button. The single

@@ -93,7 +93,7 @@
                             <button
                                 type="button"
                                 @click="show = false; {{ $closeAction ? "\$wire.{$closeAction}()" : '' }}"
-                                data-testid="slide-over-close"
+                                data-testid="slide-over-close" @wireEl('slide-over-close')
                                 aria-label="{{ __('Close') }}"
                                 class="-m-1.5 rounded-md p-1.5 text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 touch-manipulation"
                             >
@@ -131,9 +131,14 @@
                 </div>
 
                 {{-- Footer --}}
+                {{-- The bottom padding carries the safe-area inset: a full-height
+                     slide-over and a mobile sheet both end at the bottom edge of
+                     the screen, which on a phone is where the home indicator is
+                     drawn. `env()` is 0 everywhere else, so this costs nothing on
+                     a desktop. --}}
                 @if(isset($footerView) || isset($footer))
                     <div @class([
-                        'px-4 py-4 sm:px-6 border-t border-gray-200 dark:border-gray-700',
+                        'px-4 pt-4 pb-[calc(1rem_+_env(safe-area-inset-bottom))] sm:px-6 border-t border-gray-200 dark:border-gray-700',
                         'sticky bottom-0 z-10 bg-white dark:bg-gray-800' => $stickyFooter,
                     ])>
                         @isset($footerView)

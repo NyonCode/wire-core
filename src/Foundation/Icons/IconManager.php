@@ -62,6 +62,14 @@ final class IconManager
         // user's (possibly already published) config. Config may still override
         // the `outline` prefix with a different set if desired.
         $this->sets['outline'] = new HeroiconsOutlineSet;
+
+        // The framework's own glyphs, for what Heroicons has no answer to and
+        // more than one package draws — the rating star, which the Rating field
+        // and the RatingColumn both reach for. Here rather than registered by a
+        // package, for the same reason as the two above: it must be available
+        // whatever the consumer's config says, or a rating renders the
+        // missing-icon placeholder.
+        $this->sets['wire'] = new WireIconSet;
     }
 
     /**
@@ -144,6 +152,13 @@ final class IconManager
 
         $icons = [];
         foreach ($files as $file) {
+            // Skipped, not thrown, and the difference from a missing directory is
+            // deliberate: `glob()` just listed this file, so a failed read is one
+            // file's permissions rather than a mistyped config. It costs that one
+            // icon its placeholder, where aborting would cost the whole folder —
+            // and every other icon in it — at boot. Suppressed for the reason the
+            // exporters give: the warning names `file_get_contents`, which is not
+            // what anyone reading it needs.
             $contents = @file_get_contents($file);
             if ($contents === false) {
                 continue;

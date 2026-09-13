@@ -3,14 +3,10 @@
 
     assert($field instanceof CheckboxEntry);
 
-    $span = $field->getColumnSpan();
-    $spanClass = match (true) {
-        $span === 'full' => 'col-span-full',
-        $span === 2 => 'sm:col-span-2',
-        $span === 3 => 'sm:col-span-3',
-        $span === 4 => 'sm:col-span-4',
-        default => '',
-    };
+    // The canonical owner, not a sixth copy of its `match`: HasColumnSpan
+    // exists so a span means the same thing on every grid surface, and five
+    // views had quietly kept their own.
+    $spanClass = $field->getColumnSpanClass();
 
     $name = $field->getName();
     $state = (bool) $field->getState();
@@ -41,7 +37,7 @@
                 aria-label="{{ $field->getLabel() ?? $name }}"
                 @if($disabled) disabled @else @change="commit($event.target.checked)" :disabled="saving" @endif
                 :class="{ 'ring-2 ring-red-500': error }"
-                class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-800 {{ $field->getAccentColorClass() }} focus:ring-primary-500"
+                class="h-4 w-4 rounded-sm border-gray-300 dark:border-gray-600 dark:bg-gray-800 {{ $field->getAccentColorClass() }} focus:ring-primary-500"
             >
             @if($field->getLabel())
                 <span class="text-sm text-gray-900 dark:text-white">{{ $field->getLabel() }}</span>

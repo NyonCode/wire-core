@@ -71,7 +71,11 @@ it('renders as a dialog with forwarded wire bindings, body and buttons — no <x
         ->assertSeeHtml('data-testid="confirmation-cancel"')
         // additional footer action rendered via the Action API (Modal Rule 4)
         ->assertSeeHtml('data-testid="modal-footer-action-preview"')
-        ->assertSeeHtml("callModalFooterAction('preview')")
+        ->assertSeeHtml('callModalFooterAction(&#039;preview&#039;)')
+        // The disabled gate names that one action, not the method — a bare
+        // method name would gate every footer button beside it at once.
+        ->assertSeeHtml('wire:target="callModalFooterAction(&#039;preview&#039;)"')
+        ->assertDontSeeHtml('wire:target="callModalFooterAction"')
         ->assertDontSeeHtml('x-wire-modals::confirmation'); // never falls back to the component
 });
 
@@ -145,4 +149,40 @@ it('renders full-screen on mobile when fullScreenOnMobile is set', function () {
     Livewire::test(ConfirmationVariantHost::class, ['variant' => 'full'])
         ->assertSeeHtml('translate-y-full sm:translate-y-0')
         ->assertSeeHtml('items-stretch');
+});
+
+class ConfirmationMaxHeightHost extends Component
+{
+    public bool $show = true;
+
+    public ?string $maxHeight = null;
+
+    public function render(): string
+    {
+        return <<<'BLADE'
+            <div>
+                {!! new \NyonCode\WireCore\Modals\Html\Confirmation(
+                    heading: 'Why?',
+                    maxHeight: $maxHeight,
+                    wireModel: 'show',
+                    body: '<div id="halt-body">eight questions</div>',
+                ) !!}
+            </div>
+        BLADE;
+    }
+}
+
+it('caps the body and lets it scroll when maxHeight is set', function () {
+    // The dialog exposed maxHeight() through the shared modal vocabulary — and
+    // through ActionHalt and Action::modalMaxHeight() with it — while every
+    // render path dropped the value: it was documented, serialized and ignored.
+    Livewire::test(ConfirmationMaxHeightHost::class, ['maxHeight' => '24rem'])
+        ->assertSeeHtml('style="max-height: 24rem"')
+        ->assertSeeHtml('overflow-y-auto overscroll-contain');
+});
+
+it('leaves the body uncapped when no maxHeight is given', function () {
+    Livewire::test(ConfirmationMaxHeightHost::class)
+        ->assertDontSeeHtml('max-height:')
+        ->assertDontSeeHtml('overscroll-contain');
 });

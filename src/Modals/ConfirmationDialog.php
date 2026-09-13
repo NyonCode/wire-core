@@ -6,10 +6,10 @@ namespace NyonCode\WireCore\Modals;
 
 use NyonCode\WireCore\Core\Support\Trans;
 use NyonCode\WireCore\Foundation\Colors\Color;
+use NyonCode\WireCore\Foundation\Concerns\HasModalProperties;
 use NyonCode\WireCore\Foundation\Concerns\InteractsWithColor;
 use NyonCode\WireCore\Foundation\Icons\Icon;
 use NyonCode\WireCore\Modals\Concerns\HasFooterActions;
-use NyonCode\WireCore\Modals\Concerns\HasModalProperties;
 use NyonCode\WireCore\Modals\Contracts\ModalContract;
 
 /**
@@ -140,7 +140,14 @@ class ConfirmationDialog implements ModalContract
     public function danger(bool $danger = true): static
     {
         $this->isDanger = $danger;
-        if ($danger) {
+
+        // `danger()` names the intent, not the hue: it fills the colour slot only
+        // when nothing has chosen one. The same rule already guards the two
+        // confirmation constructors (`Modals\Html\Confirmation`,
+        // `Modals\View\ConfirmationComponent`), and they are the newer copies —
+        // without the guard, `->color('primary')->danger()` and
+        // `->danger()->color('primary')` disagree, and so does the Blade tag.
+        if ($danger && $this->color === null) {
             $this->color = Color::Danger->value;
         }
 

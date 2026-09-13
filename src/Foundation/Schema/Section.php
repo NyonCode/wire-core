@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace NyonCode\WireCore\Foundation\Schema;
 
 use Closure;
-use NyonCode\WireCore\Actions\Action;
 use NyonCode\WireCore\Foundation\Components\LayoutComponent;
+use NyonCode\WireCore\Foundation\Concerns\CanBeCollapsed;
 use NyonCode\WireCore\Foundation\Concerns\HasActions;
+use NyonCode\WireCore\Foundation\Contracts\ActionContract;
 use NyonCode\WireCore\Foundation\Contracts\HasFieldActions;
 use NyonCode\WireCore\Foundation\Icons\Icon;
 
@@ -21,6 +22,9 @@ use NyonCode\WireCore\Foundation\Icons\Icon;
  */
 class Section extends LayoutComponent implements HasFieldActions
 {
+    // Folding is one vocabulary with three hosts (this, Repeater, NavigationGroup);
+    // the concern owns it, including the rule that collapsed implies collapsible.
+    use CanBeCollapsed;
     use HasActions;
 
     protected string|Closure|null $description = null;
@@ -29,10 +33,6 @@ class Section extends LayoutComponent implements HasFieldActions
 
     /** @var int|array<string|int, int|string> */
     protected int|array $columns = 1;
-
-    protected bool $collapsible = false;
-
-    protected bool $collapsed = false;
 
     protected bool $compact = false;
 
@@ -66,26 +66,6 @@ class Section extends LayoutComponent implements HasFieldActions
         return $this;
     }
 
-    /** Allow the section to be collapsed and expanded. */
-    public function collapsible(bool $condition = true): static
-    {
-        $this->collapsible = $condition;
-
-        return $this;
-    }
-
-    /** Start the section collapsed (implies {@see collapsible()}). */
-    public function collapsed(bool $condition = true): static
-    {
-        $this->collapsed = $condition;
-
-        if ($condition) {
-            $this->collapsible = true;
-        }
-
-        return $this;
-    }
-
     /** Render the section with tighter spacing. */
     public function compact(bool $condition = true): static
     {
@@ -106,7 +86,7 @@ class Section extends LayoutComponent implements HasFieldActions
      * Interactive actions rendered in the section header (Filament-style).
      * Alias for {@see HasActions::actions()} with header-slot semantics.
      *
-     * @param  array<int, Action>  $actions
+     * @param  array<int, ActionContract>  $actions
      */
     public function headerActions(array $actions): static
     {
@@ -116,7 +96,7 @@ class Section extends LayoutComponent implements HasFieldActions
     /**
      * The visible header actions, in declaration order.
      *
-     * @return array<int, Action>
+     * @return array<int, ActionContract>
      */
     public function getHeaderActions(): array
     {
@@ -139,16 +119,6 @@ class Section extends LayoutComponent implements HasFieldActions
     public function getColumns(): int|array
     {
         return $this->columns;
-    }
-
-    public function isCollapsible(): bool
-    {
-        return $this->collapsible;
-    }
-
-    public function isCollapsed(): bool
-    {
-        return $this->collapsed;
     }
 
     public function isCompact(): bool

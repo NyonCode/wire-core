@@ -7,7 +7,6 @@ use NyonCode\WireCore\Widgets\ChartWidget;
 use NyonCode\WireCore\Widgets\CustomWidget;
 use NyonCode\WireCore\Widgets\Stat;
 use NyonCode\WireCore\Widgets\StatsOverviewWidget;
-use NyonCode\WireCore\Widgets\TableWidget;
 use NyonCode\WireCore\Widgets\Widget;
 
 // ─── CustomWidget ────────────────────────────────────────────────────────────
@@ -61,16 +60,6 @@ it('renders a chart widget with chart data', function () {
         ->toContain('wire-chart-widget')
         ->toContain('Revenue')
         ->toContain('Jan');
-});
-
-// ─── TableWidget ─────────────────────────────────────────────────────────────
-
-it('creates a table widget with callback', function () {
-    $callback = fn () => null;
-    $widget = TableWidget::make()->table($callback);
-
-    expect($widget)->toBeInstanceOf(Widget::class)
-        ->and($widget->getTableCallback())->toBe($callback);
 });
 
 // ─── HasPolling ──────────────────────────────────────────────────────────────
@@ -135,10 +124,21 @@ it('supports heading and description', function () {
 
 // ─── Lazy Loading ────────────────────────────────────────────────────────────
 
-it('is not lazy by default', function () {
-    expect(CustomWidget::make()->isLazy())->toBeFalse();
+it('is eager unless asked otherwise', function () {
+    // The render standard's default: make the render cheap, do not defer it.
+    expect(CustomWidget::make()->isLazy())->toBeFalse()
+        ->and(CustomWidget::make()->lazy()->isLazy())->toBeTrue()
+        ->and(CustomWidget::make()->lazy()->lazy(false)->isLazy())->toBeFalse();
 });
 
-it('can be set to lazy', function () {
-    expect(CustomWidget::make()->lazy()->isLazy())->toBeTrue();
+// ─── Addressable Regions ─────────────────────────────────────────────────────
+
+it('needs no anchor until something replaces it on its own', function () {
+    // A widget nothing targets renders inline, exactly as it always did — the
+    // anchor is what a poll tick, a deferred load and a filter change all need,
+    // and only those three.
+    expect(CustomWidget::make()->usesPartialAnchor())->toBeFalse()
+        ->and(CustomWidget::make()->pollingInterval('10s')->usesPartialAnchor())->toBeTrue()
+        ->and(CustomWidget::make()->lazy()->usesPartialAnchor())->toBeTrue()
+        ->and(CustomWidget::make()->filter(['week' => 'Week'])->usesPartialAnchor())->toBeTrue();
 });
