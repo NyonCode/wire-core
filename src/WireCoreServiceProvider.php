@@ -7,6 +7,7 @@ namespace NyonCode\WireCore;
 use Illuminate\Notifications\ChannelManager;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\View;
 use Livewire\ComponentHookRegistry;
 use Livewire\Livewire;
@@ -15,6 +16,7 @@ use NyonCode\LaravelPackageToolkit\Packager;
 use NyonCode\LaravelPackageToolkit\PackageServiceProvider;
 use NyonCode\LaravelPackageToolkit\Support\PackageAssets;
 use NyonCode\LaravelPackageToolkit\Support\PublishedAssets;
+use NyonCode\WireCore\Actions\Console\MakeActionCommand;
 use NyonCode\WireCore\Actions\Support\ActionCallbackInvoker;
 use NyonCode\WireCore\Actions\Support\ComponentActionRunner;
 use NyonCode\WireCore\Actions\View\BulkButtonComponent;
@@ -36,12 +38,20 @@ use NyonCode\WireCore\Core\Resources\ResourceRecordUrls;
 use NyonCode\WireCore\Core\Resources\ResourceRegistry;
 use NyonCode\WireCore\Core\Resources\View\Breadcrumbs;
 use NyonCode\WireCore\Core\Resources\Workspace;
+use NyonCode\WireCore\Core\Tenancy\Console\CreateTenantDatabaseCommand;
+use NyonCode\WireCore\Core\Tenancy\Console\MigrateTenantsCommand;
+use NyonCode\WireCore\Core\Tenancy\Contracts\IsolatesTenants;
 use NyonCode\WireCore\Core\Tenancy\Contracts\TenantResolver;
-use NyonCode\WireCore\Core\Tenancy\NullTenantResolver;
+use NyonCode\WireCore\Core\Tenancy\CurrentTenant;
+use NyonCode\WireCore\Core\Tenancy\CurrentTenantResolver;
+use NyonCode\WireCore\Core\Tenancy\Isolation\ColumnIsolation;
+use NyonCode\WireCore\Core\Tenancy\Isolation\DatabaseIsolation;
+use NyonCode\WireCore\Core\Tenancy\Queue\CarriesTenantThroughQueue;
 use NyonCode\WireCore\Core\Tenancy\Tenancy;
 use NyonCode\WireCore\Core\Validation\ValidationPipeline;
 use NyonCode\WireCore\Exceptions\IconSetRegistrationException;
 use NyonCode\WireCore\Exceptions\PluginRegistrationException;
+use NyonCode\WireCore\Exceptions\TenancyException;
 use NyonCode\WireCore\Foundation\Assets\Bundle;
 use NyonCode\WireCore\Foundation\Components\Component;
 use NyonCode\WireCore\Foundation\Contracts\ClassifiesComponentActions;
@@ -54,10 +64,11 @@ use NyonCode\WireCore\Foundation\Mentions\MentionRenderer;
 use NyonCode\WireCore\Foundation\Registration\Catalog;
 use NyonCode\WireCore\Foundation\Registration\ClassDiscovery;
 use NyonCode\WireCore\Foundation\Routing\Contracts\AuthorizesUrls;
-use NyonCode\WireCore\Foundation\Routing\Contracts\RegistersPageRoutes;
 use NyonCode\WireCore\Foundation\Routing\Contracts\ResolvesPageUrls;
+use NyonCode\WireCore\Foundation\Routing\RenderedPage;
 use NyonCode\WireCore\Foundation\Routing\UnguardedUrls;
 use NyonCode\WireCore\Foundation\Routing\UnroutedPageUrls;
+use NyonCode\WireCore\Foundation\Routing\WireRoutes;
 use NyonCode\WireCore\Foundation\Setup\EnvFile;
 use NyonCode\WireCore\Foundation\Support\IslandViewScope;
 use NyonCode\WireCore\Foundation\Support\PartialRenderHook;
@@ -70,6 +81,7 @@ use NyonCode\WireCore\Foundation\View\FloatingAssets;
 use NyonCode\WireCore\Foundation\View\PageChrome;
 use NyonCode\WireCore\Foundation\View\Primitives;
 use NyonCode\WireCore\GlobalSearch\GlobalSearchPalette;
+use NyonCode\WireCore\Infolists\Console\MakeEntryCommand;
 use NyonCode\WireCore\Modals\View\ConfirmationComponent;
 use NyonCode\WireCore\Modals\View\ModalComponent;
 use NyonCode\WireCore\Modals\View\SlideOverComponent;
@@ -117,6 +129,7 @@ class WireCoreServiceProvider extends PackageServiceProvider
                 $this->registerPlugins();
                 $this->registerResources();
                 $this->registerTenancy();
+                $this->registerRouting();
             })
             ->bootedPackage(function ($packager) {
                 $this->bootFoundation();
@@ -126,22 +139,32 @@ class WireCoreServiceProvider extends PackageServiceProvider
                 $this->bootPlugins();
                 $this->bootResources();
                 $this->bootTours();
+                // Queued work runs in the tenant it was dispatched in (ADR 0040 §9).
+                $this->app->make(CarriesTenantThroughQueue::class)->register($this->app->make('events'));
                 Bundle::serve('wire-core', self::ASSETS_PATH);
             })
             ->hasConfig()
             ->hasCommand(PruneAuditEntriesCommand::class)
+            ->hasCommand(CreateTenantDatabaseCommand::class)
+            ->hasCommand(MigrateTenantsCommand::class)
             ->hasCommand(PruneNotificationsCommand::class)
             ->hasCommand(MakeDashboardCommand::class)
             ->hasCommand(MakeWidgetCommand::class)
+            ->hasCommand(MakeEntryCommand::class)
+            ->hasCommand(MakeActionCommand::class)
             // The generators' templates, publishable so an application can
             // change what they produce — Laravel's own `stub:publish`
             // convention, which the commands honour by preferring
-            // `base_path('stubs/…')` over these. The widget generator writes two
-            // files, so it has two: the class and the Blade view it names.
+            // `base_path('stubs/…')` over these. A generator that writes a view
+            // has two: the class and the Blade view it names.
             ->hasStubs([
                 '../stubs/dashboard.stub',
                 '../stubs/widget.stub',
                 '../stubs/widget-view.stub',
+                '../stubs/entry.stub',
+                '../stubs/entry-view.stub',
+                '../stubs/action.stub',
+                '../stubs/bulk-action.stub',
             ])
             // A provider the consumer owns, the way Cashier and Fortify ship
             // one: where an application registers its dashboards and declares
@@ -622,17 +645,39 @@ class WireCoreServiceProvider extends PackageServiceProvider
     /**
      * Bind the tenancy seam.
      *
-     * The resolver defaults to "no tenant" rather than to the authenticated
-     * user: the framework does not know which column holds an application's
-     * tenant, and guessing would be a guess about who may see what. With
-     * tenancy off the default costs nothing; with it on, an application that
-     * has not bound its own resolver sees an empty page, which is the safe
-     * direction to fail in.
+     * The resolver defaults to whatever tenant was entered ({@see CurrentTenant})
+     * rather than to the authenticated user: the framework does not know which
+     * column holds an application's tenant, and guessing would be a guess about
+     * who may see what. Nothing entered is still "no tenant" — with tenancy on,
+     * an empty page until something enters one, which is the safe direction to
+     * fail in. An application binding its own resolver keeps it.
+     *
+     * The holder is scoped, so a request under Octane and a queued job each
+     * start with none (ADR 0040 §1).
      */
     protected function registerTenancy(): void
     {
-        $this->app->bindIf(TenantResolver::class, NullTenantResolver::class);
+        $this->app->bindIf(TenantResolver::class, CurrentTenantResolver::class);
         $this->app->singleton(Tenancy::class);
+        $this->app->scoped(CurrentTenant::class);
+        $this->app->singleton(CarriesTenantThroughQueue::class);
+        $this->app->bindIf(IsolatesTenants::class, function ($app): IsolatesTenants {
+            $isolation = config('wire-core.tenancy.isolation', 'column');
+
+            if ($isolation === 'column' || $isolation === null) {
+                return new ColumnIsolation;
+            }
+
+            if ($isolation === 'database') {
+                return $app->make(DatabaseIsolation::class);
+            }
+
+            if (is_string($isolation) && is_a($isolation, IsolatesTenants::class, true)) {
+                return $app->make($isolation);
+            }
+
+            throw TenancyException::unknownIsolation(is_string($isolation) ? $isolation : get_debug_type($isolation));
+        });
     }
 
     protected function registerResources(): void
@@ -662,6 +707,10 @@ class WireCoreServiceProvider extends PackageServiceProvider
         // `wire-panels` — so core declares the question and answers it with
         // "nothing is routed" until a package that routes says otherwise.
         $this->app->bindIf(ResolvesPageUrls::class, UnroutedPageUrls::class);
+
+        // The page a Livewire round trip is working on, so Zone can answer
+        // on the second render too; the routing package fills it.
+        $this->app->scoped(RenderedPage::class);
 
         // Its other half: whether somebody may open a URL. Yes until the same
         // package says which routes carry `can:` middleware.
@@ -775,6 +824,19 @@ class WireCoreServiceProvider extends PackageServiceProvider
         return $found;
     }
 
+    /**
+     * `Route::wire('key', …options)` — every package's routes, placed by the
+     * application's own route file inside whatever group it builds (ADR 0041).
+     * Named arguments arrive as the group's options: `zone:`, `only:`,
+     * `routes:` for changes to single routes.
+     */
+    protected function registerRouting(): void
+    {
+        $this->app->singleton(WireRoutes::class);
+
+        Route::macro(WireRoutes::MACRO, fn (string $key, mixed ...$options): array => app(WireRoutes::class)->wire($key, $options));
+    }
+
     protected function bootResources(): void
     {
         $this->app->make(ResourceRegistry::class)->registerMany(config('wire-core.resources', []));
@@ -787,18 +849,14 @@ class WireCoreServiceProvider extends PackageServiceProvider
 
         $this->bootModules();
 
-        // Last, and only if a package owns routing: this is the first moment the
-        // catalogue is complete, and an application that asked for its routes in
-        // config gets them from here rather than from a route file. Core does not
-        // learn how to route — it knows when, which is the half that cannot live
-        // in the routing package (ADR 0026 §5).
-        //
-        // In boot(), never in a booted() callback: Laravel installs a cached
-        // route collection from one of those, and a route registered after that
-        // either vanishes or is applied twice depending on callback order.
-        if ($this->app->bound(RegistersPageRoutes::class)) {
-            $this->app->make(RegistersPageRoutes::class)->register();
-        }
+        // The framework's one route file, last: the first moment every
+        // package's resources and route groups are registered, so the groups
+        // config describes can read a complete catalogue. In boot(), never in a
+        // booted() callback — Laravel installs a cached route collection from
+        // one of those, and a route registered after it vanishes or doubles
+        // depending on callback order. `loadRoutesFrom()` skips it when the
+        // routes are cached.
+        $this->loadRoutesFrom(__DIR__.'/../routes/web.php');
     }
 
     /**

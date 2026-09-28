@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace NyonCode\WireCore\Core\Tenancy;
 
+use Closure;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Bus\PendingDispatch;
 use NyonCode\WireCore\Core\Tenancy\Contracts\TenantResolver;
 
 /**
@@ -64,5 +67,47 @@ final class Tenancy
     public function shouldBlockEverything(): bool
     {
         return $this->enabled() && $this->resolver->resolve() === null;
+    }
+
+    /**
+     * Work inside one tenant for the length of a callback, and come back out.
+     *
+     * The one way a command, a seeder, a job or a test enters a tenant: it
+     * restores whatever was current before — another tenant, or none — even
+     * when the callback throws, so nothing is left entered by accident. Nested
+     * calls unwind in order.
+     *
+     * **A job the callback returns is dispatched here, inside the tenant.**
+     * `Job::dispatch()` gives back a `PendingDispatch` that queues when it is
+     * destroyed, and one returned out of `fn () => Job::dispatch()` would be
+     * destroyed by the caller — after the tenant is left, carrying none. This
+     * holds the only reference to it, so dropping it here queues it now; the
+     * return value is then null, since the job is already on its way.
+     *
+     * @template TReturn
+     *
+     * @param  Closure(Model): TReturn  $callback  Receives the tenant.
+     * @return TReturn
+     */
+    public function runAs(Model $tenant, Closure $callback): mixed
+    {
+        $current = app(CurrentTenant::class);
+        $previous = $current->get();
+
+        $current->enter($tenant);
+
+        try {
+            $result = $callback($tenant);
+
+            if ($result instanceof PendingDispatch) {
+                unset($result);
+
+                return null;
+            }
+
+            return $result;
+        } finally {
+            $previous === null ? $current->leave() : $current->enter($previous);
+        }
     }
 }

@@ -47,7 +47,7 @@ final class Zone
      */
     public static function current(): ?string
     {
-        return self::of(Route::currentRouteName());
+        return self::of(self::pageRouteName());
     }
 
     /**
@@ -65,7 +65,7 @@ final class Zone
      */
     public static function currentKey(): ?string
     {
-        return self::keyOf(Route::currentRouteName());
+        return self::keyOf(self::pageRouteName());
     }
 
     /**
@@ -85,7 +85,7 @@ final class Zone
      */
     public static function currentPage(): ?string
     {
-        return self::pageOf(Route::currentRouteName());
+        return self::pageOf(self::pageRouteName());
     }
 
     /**
@@ -127,6 +127,26 @@ final class Zone
     }
 
     /**
+     * The route of the page being rendered — the current one when it is a
+     * page, and otherwise the page this request is working on.
+     *
+     * The second half is what a Livewire round trip needs: its route is
+     * `livewire.update`, and the routing package remembers the page's route in
+     * {@see RenderedPage} by re-running persistent middleware against it. With
+     * nothing remembered this is `Route::currentRouteName()`, as it always was.
+     */
+    private static function pageRouteName(): ?string
+    {
+        $current = Route::currentRouteName();
+
+        if (self::parse($current) !== []) {
+            return $current;
+        }
+
+        return app(RenderedPage::class)->routeName() ?? $current;
+    }
+
+    /**
      * The one place the page-route name shape is written.
      *
      * Anchored rather than searched for, because the obvious
@@ -146,8 +166,9 @@ final class Zone
         // address — the entry wire-panels routes at a group's root when no
         // landing page claims it. That one is about no resource, so it has a
         // zone and nothing else; without it here, the entry could not tell
-        // which zone it was answering for.
-        if (preg_match('/^(?<zone>.+\.)?wire\.(?:(?<key>[^.]+)\.(?<page>[^.]+)|home)$/', $routeName, $m) !== 1) {
+        // which zone it was answering for. `wire.tenants` is a tenant zone's
+        // address without a tenant (ADR 0040), the same kind of thing.
+        if (preg_match('/^(?<zone>.+\.)?wire\.(?:(?<key>[^.]+)\.(?<page>[^.]+)|home|tenants)$/', $routeName, $m) !== 1) {
             return [];
         }
 
