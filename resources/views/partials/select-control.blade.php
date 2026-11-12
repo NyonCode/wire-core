@@ -171,7 +171,7 @@
         @keydown.arrow-down.prevent="onArrowDown()"
         @keydown.arrow-up.prevent="onArrowUp()"
         @keydown.enter.prevent="onEnter()"
-        @keydown.escape="open = false; activeIndex = -1"
+        @keydown.escape="open && $event.preventDefault(); open = false; activeIndex = -1"
         aria-haspopup="listbox"
         :aria-expanded="$data.open"
         :aria-activedescendant="$data.activeDescendant"
@@ -209,6 +209,7 @@
                     x-transition:leave-start="opacity-100"
                     x-transition:leave-end="opacity-0"
                     @click="open = false; activeIndex = -1"
+                    data-sheet-backdrop
                     class="fixed inset-0 z-40 bg-gray-500/60 dark:bg-gray-900/70 {{ $sheetBackdrop }}"
                 ></div>
             @endif
@@ -241,7 +242,10 @@
             {{-- 16px below sm, as on the native twin: the input takes focus as the
                  list opens, and iOS Safari zooms the page into any control under
                  16px — on a phone the whole form looks pushed off the edge. --}}
-            <div class="p-2">
+            {{-- In a sheet the search stays pinned under the grabber while the list
+                 scrolls, and marks the sheet as searchable: it opens at the large
+                 height and keeps it as the results narrow (sheet.js). --}}
+            <div @if($sheetOnMobile) data-sheet-search @endif @class(['p-2', \NyonCode\WireCore\Foundation\Support\MobileSheet::stickySearch($mobileBreakpoint) => $sheetOnMobile])>
                 <input
                     type="text"
                     autocomplete="off"
@@ -249,7 +253,7 @@
                     @keydown.arrow-down.prevent="onArrowDown()"
                     @keydown.arrow-up.prevent="onArrowUp()"
                     @keydown.enter.prevent="onEnter()"
-                    @keydown.escape="open = false; activeIndex = -1"
+                    @keydown.escape="open && $event.preventDefault(); open = false; activeIndex = -1"
                     placeholder="{{ $searchPrompt }}"
                     aria-label="{{ $searchPrompt }}"
                     data-testid="select-search" @wireEl('select-search')
@@ -259,7 +263,9 @@
             </div>
             @endif
 
-            <ul class="py-1" role="listbox" :aria-activedescendant="$data.activeDescendant" @if($multiple) aria-multiselectable="true" @endif>
+            {{-- In a sheet the rows are inset from the screen's edges, so a highlighted
+                 row never runs into a phone's rounded corners. --}}
+            <ul @class(['py-1', \NyonCode\WireCore\Foundation\Support\MobileSheet::listInset($mobileBreakpoint) => $sheetOnMobile]) role="listbox" :aria-activedescendant="$data.activeDescendant" @if($multiple) aria-multiselectable="true" @endif>
                 @if($placeholder !== null && $placeholder !== '')
                     <li role="option" aria-selected="false">
                         <button
